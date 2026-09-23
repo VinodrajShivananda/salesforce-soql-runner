@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 
 
 type RecordValue = Record<string, unknown>;
 type QueryResult = { totalSize: number; records: RecordValue[] };
+type SchemaData = { fields?: string[]; relationships?: Record<string, string[]> };
 
 export default function Home() {
   const [query, setQuery] = useState('SELECT Id, Name FROM Account LIMIT 10');
@@ -17,7 +18,7 @@ export default function Home() {
   const [password, setPassword] = useState('');
   const [securityToken, setSecurityToken] = useState('');
   const [availableFields, setAvailableFields] = useState<string[]>([]);
-  const [relationships, setRelationships] = useState<Record<string, string>>({});
+  const [relationships, setRelationships] = useState<Record<string, string[]>>({});
   const [parentFields, setParentFields] = useState<string[]>([]);
   const [cursorPosition, setCursorPosition] = useState(0);
   const [activeSuggestion, setActiveSuggestion] = useState(0);
@@ -30,12 +31,13 @@ export default function Home() {
   const objectName = query.match(/\bFROM\s+([A-Za-z][A-Za-z0-9_]*)/i)?.[1] || '';
   const textBeforeCursor = query.slice(0, cursorPosition);
   const isSelectingFields = /^\s*SELECT\b[\s\S]*$/i.test(textBeforeCursor) && !/\bFROM\b/i.test(textBeforeCursor);
-  const fieldMatch = isSelectingFields ? textBeforeCursor.match(/(?:^|,)\s*([A-Za-z_]\w*)(?:\.([A-Za-z_]\w*)?)?$/) : null;
-  const hasRelationship = Boolean(fieldMatch?.[0].includes('.'));
-  const relationshipPrefix = hasRelationship ? fieldMatch?.[1] || '' : '';
-  const partialField = hasRelationship ? fieldMatch?.[2] || '' : fieldMatch?.[1] || '';
-  const fieldsToSuggest = relationshipPrefix ? parentFields : availableFields;
-  const suggestions = fieldMatch && (partialField || relationshipPrefix)
+  const relationshipMatch = isSelectingFields ? textBeforeCursor.match(/(?:^|,)\s*((?:[A-Za-z_]\w*\s*\.\s*)+)([A-Za-z_]\w*)?\s*$/) : null;
+  const relationshipPath = relationshipMatch?.[1].split('.').map(segment => segment.trim()).filter(Boolean) || [];
+  const relationshipPrefix = relationshipPath.join('.');
+  const directFieldMatch = !relationshipMatch && isSelectingFields ? textBeforeCursor.match(/(?:^|,)\s*([A-Za-z_]\w*)\s*$/) : null;
+  const partialField = relationshipMatch?.[2] || directFieldMatch?.[1] || '';
+  const fieldsToSuggest = relationshipPath.length ? parentFields : availableFields;
+  const suggestions = (relationshipMatch || directFieldMatch) && (partialField || relationshipPrefix)
     ? fieldsToSuggest.filter(field => field.toLowerCase().startsWith(partialField.toLowerCase())).slice(0, 12)
     : [];
 
@@ -47,6 +49,7 @@ export default function Home() {
     if (!authenticated || !objectName) {
       setAvailableFields([]);
       setRelationships({});
+      setParentFields([]);
       return;
     }
     fetch(`/api/schema?object=${encodeURIComponent(objectName)}`)
@@ -61,18 +64,30 @@ export default function Home() {
       });
   }, [authenticated, objectName]);
 
-  const parentObjectName = relationshipPrefix ? relationships[relationshipPrefix] : '';
-
   useEffect(() => {
-    if (!authenticated || !parentObjectName) {
-      setParentFields([]);
+    setParentFields([]);
+    if (!authenticated || !objectName || !relationshipPath.length) {
       return;
     }
-    fetch(`/api/schema?object=${encodeURIComponent(parentObjectName)}`)
-      .then(response => response.ok ? response.json() : null)
-      .then(data => setParentFields(data?.fields || []))
-      .catch(() => setParentFields([]));
-  }, [authenticated, parentObjectName]);
+
+    async function loadRelatedFields() {
+      let currentRelationships = relationships;
+
+      for (const relationship of relationshipPath) {
+        const nextObject = currentRelationships[relationship]?.[0];
+        if (!nextObject) return;
+        const response = await fetch(`/api/schema?object=${encodeURIComponent(nextObject)}`);
+        if (!response.ok) return;
+        const data = await response.json() as SchemaData;
+        currentRelationships = data.relationships || {};
+        if (relationship === relationshipPath[relationshipPath.length - 1]) {
+          setParentFields(data.fields || []);
+        }
+      }
+    }
+
+    void loadRelatedFields().catch(() => setParentFields([]));
+  }, [authenticated, objectName, relationshipPrefix, relationships]);
 
   function updateCursor() {
     setCursorPosition(queryEditorRef.current?.selectionStart || 0);

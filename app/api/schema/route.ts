@@ -23,8 +23,8 @@ export async function GET(request: Request) {
   const fields = data.fields as Array<{ name: string; relationshipName?: string; referenceTo?: string[] }>;
   const relationships = Object.fromEntries(
     fields
-      .filter(field => field.relationshipName && field.referenceTo?.[0])
-      .map(field => [field.relationshipName, field.referenceTo?.[0]])
+      .filter(field => field.relationshipName && field.referenceTo?.length)
+      .map(field => [field.relationshipName, field.referenceTo])
   );
 
   return NextResponse.json({
