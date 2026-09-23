@@ -2,9 +2,10 @@ import { NextResponse } from 'next/server';
 import { createSession } from '../../../../lib/session';
 
 export async function POST(request: Request) {
-  const body = await request.json() as { username?: string; password?: string; loginUrl?: string };
+  const body = await request.json() as { username?: string; password?: string; securityToken?: string; loginUrl?: string };
   const username = body.username?.trim();
   const password = body.password;
+  const securityToken = body.securityToken || '';
 
   if (!username || !password) {
     return NextResponse.json({ error: 'Username and password are required.' }, { status: 400 });
@@ -21,7 +22,7 @@ export async function POST(request: Request) {
   <soapenv:Body>
     <urn:login>
       <urn:username>${soapEscape(username)}</urn:username>
-      <urn:password>${soapEscape(password)}</urn:password>
+      <urn:password>${soapEscape(password + securityToken)}</urn:password>
     </urn:login>
   </soapenv:Body>
 </soapenv:Envelope>`;
