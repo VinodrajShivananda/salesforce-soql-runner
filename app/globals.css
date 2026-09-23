@@ -10,8 +10,10 @@ h1 { font-size: 22px; margin: 7px 0 0; letter-spacing: -.04em; }
 .brand h1 { margin: 0; font-size: 18px; letter-spacing: 0; }
 .logo { font-size: 24px; }
 .connection-area { display: flex; align-items: center; gap: 12px; }
-.user-name { max-width: 260px; overflow: hidden; color: #4a5568; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 500; }
+.org-badge { max-width: 360px; overflow: hidden; border-radius: 8px; background: #edf2f7; color: #2d4a70; padding: 9px 16px; text-overflow: ellipsis; white-space: nowrap; font-size: 16px; font-weight: 600; }
 .connection { border-radius: 8px; color: white; background: linear-gradient(135deg, var(--lime), var(--violet)); padding: 11px 15px; text-decoration: none; font-weight: 600; font-size: 13px; }
+.disconnect { border: 2px solid var(--line); background: white; color: #38506f; padding: 9px 22px; font-size: 16px; font-weight: 600; }
+.disconnect:hover { border-color: var(--lime); color: var(--lime); }
 .connection span { margin-left: 12px; }
 .workspace { width: min(1100px, 100%); margin: 24px auto; padding: 0 24px; flex: 1; }
 .intro { max-width: 550px; }

@@ -12,7 +12,6 @@ export default function Home() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [authenticated, setAuthenticated] = useState(false);
-  const [loggedInUsername, setLoggedInUsername] = useState('');
   const [instanceUrl, setInstanceUrl] = useState('');
   const [showLogin, setShowLogin] = useState(false);
   const [loginUrl, setLoginUrl] = useState('https://login.salesforce.com');
@@ -31,7 +30,6 @@ export default function Home() {
   useEffect(() => {
     fetch('/api/auth/session').then(response => response.json()).then(data => {
       setAuthenticated(data.authenticated);
-      setLoggedInUsername(data.username || '');
       setInstanceUrl(data.instanceUrl || '');
     });
   }, []);
@@ -203,7 +201,6 @@ export default function Home() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Login failed.');
       setAuthenticated(true);
-      setLoggedInUsername(data.username || username);
       const sessionData = await fetch('/api/auth/session').then(response => response.json());
       setInstanceUrl(sessionData.instanceUrl || '');
       setShowLogin(false);
@@ -215,16 +212,22 @@ export default function Home() {
     }
   }
 
-  const fields = result ? [...new Set(result.records.flatMap(record => Object.keys(record)).filter(field => field !== 'attributes'))] : [];
+  async function disconnect() {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    setAuthenticated(false);
+    setInstanceUrl('');
+    setResult(null);
+  }
+
+  const fields = result ? getSelectedFields(query, result.records) : [];
 
   return (
     <main className="shell">
-      <header className="topbar"><div className="brand"><span className="logo">⚡</span><h1>SOQL Runner</h1></div><div className="connection-area">{authenticated && <span className="user-name">{loggedInUsername}</span>}<button className="connection" onClick={() => setShowLogin(true)}>{authenticated ? 'Connected' : 'Connect Salesforce'} <span>↗</span></button></div></header>
+      <header className="topbar"><div className="brand"><span className="logo">⚡</span><h1>SOQL Runner</h1></div><div className="connection-area">{authenticated ? <><span className="org-badge">{getOrgHost(instanceUrl)}</span><button className="disconnect" onClick={disconnect}>Disconnect</button></> : <button className="connection" onClick={() => setShowLogin(true)}>Connect Salesforce <span>↗</span></button>}</div></header>
       <section className="workspace">
-        <div className="intro"><p className="eyebrow">QUERY CONSOLE</p><h2>Ask your org<br /><em>anything.</em></h2><p className="lede">Run precise SOQL against your connected Salesforce org and inspect the records without leaving your browser.</p></div>
         <div className="editor-panel"><div className="panel-head"><span>SOQL EDITOR</span><span className="status-dot">{authenticated ? 'ORG CONNECTED' : 'AUTH REQUIRED'}</span></div><div className="editor-body"><textarea ref={queryEditorRef} value={query} onChange={event => { setQuery(event.target.value); setCursorPosition(event.target.selectionStart); }} onClick={updateCursor} onKeyUp={updateCursor} onKeyDown={handleEditorKeyDown} spellCheck={false} aria-label="SOQL query" />{editorSuggestions.length > 0 && <div className="field-suggestions" role="listbox">{editorSuggestions.map((suggestion, index) => <button type="button" key={suggestion} className={index === activeSuggestion ? 'active' : ''} onMouseDown={event => event.preventDefault()} onClick={() => insertSuggestion(suggestion)}>{dateSuggestions.length ? suggestion : objectMatch ? suggestion : relationshipPrefix ? `${relationshipPrefix}.${suggestion}` : suggestion}</button>)}</div>}</div><div className="editor-foot"><span>REST API · v61.0</span><button onClick={runQuery} disabled={loading || !query.trim()}>{loading ? 'Running...' : 'Run query'} <span>⌘ ↵</span></button></div></div>
         {error && <div className="error">{error}</div>}
-        {result && <section className="results"><div className="results-head"><div><p className="eyebrow">RESULTS</p><h3>{result.totalSize} record{result.totalSize === 1 ? '' : 's'}</h3></div><span className="result-mark">LIVE</span></div><div className="table-wrap"><table><thead><tr>{fields.map(field => <th key={field}>{field}</th>)}</tr></thead><tbody>{result.records.map((record, index) => <tr key={index}>{fields.map(field => <td key={field}>{field === 'Id' && typeof record[field] === 'string' && instanceUrl ? <a href={`${instanceUrl}/lightning/r/${objectName}/${record[field]}/view`} target="_blank" rel="noreferrer">{record[field]}</a> : formatValue(record[field])}</td>)}</tr>)}</tbody></table></div></section>}
+        {result && <section className="results"><div className="results-head"><div><p className="eyebrow">RESULTS</p><h3>{result.totalSize} record{result.totalSize === 1 ? '' : 's'}</h3></div><span className="result-mark">LIVE</span></div><div className="table-wrap"><table><thead><tr>{fields.map(field => <th key={field}>{field}</th>)}</tr></thead><tbody>{result.records.map((record, index) => <tr key={index}>{fields.map(field => { const value = getNestedValue(record, field); return <td key={field}>{field === 'Id' && typeof value === 'string' && instanceUrl ? <a href={`${instanceUrl}/lightning/r/${objectName}/${value}/view`} target="_blank" rel="noreferrer">{value}</a> : formatValue(value)}</td>; })}</tr>)}</tbody></table></div></section>}
       </section>
       {showLogin && <div className="modal-backdrop"><form className="login-panel" onSubmit={login}><button type="button" className="close" onClick={() => setShowLogin(false)} aria-label="Close login">×</button><div className="login-icon">⚡</div><h1>SOQL Runner</h1><p className="subtitle">Connect to any Salesforce org to run SOQL queries</p><p className="login-note">Credentials are sent directly to Salesforce and are not saved by this app.</p><label>Environment<select value={loginUrl} onChange={event => setLoginUrl(event.target.value)}><option value="https://login.salesforce.com">Production / Developer</option><option value="https://test.salesforce.com">Sandbox</option></select></label><label>Username<input type="email" value={username} onChange={event => setUsername(event.target.value)} autoComplete="username" required /></label><label>Password + Security Token<input type="password" value={password} onChange={event => setPassword(event.target.value)} autoComplete="current-password" required /></label><p className="login-note login-hint">Append your security token to your password (for example: MyPass123TOKEN456).</p><button className="login-submit" type="submit" disabled={loading}>{loading ? 'Connecting...' : 'Connect to Salesforce'}</button></form></div>}
       <footer><span>SOQL RUNNER / VERCEL EDITION</span><span>Credentials stay server-side</span></footer>
@@ -235,4 +238,28 @@ export default function Home() {
 function formatValue(value: unknown): string {
   if (value === null || value === undefined) return '';
   return typeof value === 'object' ? JSON.stringify(value) : String(value);
+}
+
+function getSelectedFields(query: string, records: RecordValue[]): string[] {
+  const selectedFields = query.match(/^\s*SELECT\s+([\s\S]*?)\s+FROM\b/i)?.[1]
+    ?.split(',')
+    .map(field => field.trim().split(/\s+AS\s+|\s+/i)[0])
+    .filter(field => field && field.toLowerCase() !== 'attributes') || [];
+  if (selectedFields.length) return [...new Set(selectedFields)];
+  return [...new Set(records.flatMap(record => Object.keys(record)).filter(field => field !== 'attributes'))];
+}
+
+function getNestedValue(record: RecordValue, path: string): unknown {
+  return path.split('.').reduce<unknown>((value, segment) => {
+    if (!value || typeof value !== 'object') return undefined;
+    return (value as RecordValue)[segment];
+  }, record);
+}
+
+function getOrgHost(instanceUrl: string): string {
+  try {
+    return new URL(instanceUrl).hostname;
+  } catch {
+    return instanceUrl;
+  }
 }
