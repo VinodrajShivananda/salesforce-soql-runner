@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { createSession } from '../../../../lib/session';
 
 export async function POST(request: Request) {
-  const body = await request.json() as { username?: string; password?: string; securityToken?: string; loginUrl?: string };
+  const body = await request.json() as { username?: string; password?: string; loginUrl?: string };
   const username = body.username?.trim();
   const password = body.password;
 
@@ -21,7 +21,7 @@ export async function POST(request: Request) {
   <soapenv:Body>
     <urn:login>
       <urn:username>${soapEscape(username)}</urn:username>
-      <urn:password>${soapEscape(password + (body.securityToken || ''))}</urn:password>
+      <urn:password>${soapEscape(password)}</urn:password>
     </urn:login>
   </soapenv:Body>
 </soapenv:Envelope>`;

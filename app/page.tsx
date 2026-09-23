@@ -16,7 +16,6 @@ export default function Home() {
   const [loginUrl, setLoginUrl] = useState('https://login.salesforce.com');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [securityToken, setSecurityToken] = useState('');
   const [availableFields, setAvailableFields] = useState<string[]>([]);
   const [relationships, setRelationships] = useState<Record<string, string[]>>({});
   const [parentFields, setParentFields] = useState<string[]>([]);
@@ -151,14 +150,13 @@ export default function Home() {
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password, securityToken, loginUrl })
+        body: JSON.stringify({ username, password, loginUrl })
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Login failed.');
       setAuthenticated(true);
       setShowLogin(false);
       setPassword('');
-      setSecurityToken('');
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Login failed.');
     } finally {
@@ -170,14 +168,14 @@ export default function Home() {
 
   return (
     <main className="shell">
-      <header className="topbar"><div><span className="kicker">SALESFORCE / DATA DESK</span><h1>SOQL Runner</h1></div><button className="connection" onClick={() => setShowLogin(true)}>{authenticated ? 'Connected' : 'Connect Salesforce'} <span>↗</span></button></header>
+      <header className="topbar"><div className="brand"><span className="logo">⚡</span><h1>SF Dependency Analyzer</h1></div><button className="connection" onClick={() => setShowLogin(true)}>{authenticated ? 'Connected' : 'Connect Salesforce'} <span>↗</span></button></header>
       <section className="workspace">
         <div className="intro"><p className="eyebrow">QUERY CONSOLE</p><h2>Ask your org<br /><em>anything.</em></h2><p className="lede">Run precise SOQL against your connected Salesforce org and inspect the records without leaving your browser.</p></div>
         <div className="editor-panel"><div className="panel-head"><span>SOQL EDITOR</span><span className="status-dot">{authenticated ? 'ORG CONNECTED' : 'AUTH REQUIRED'}</span></div><div className="editor-body"><textarea ref={queryEditorRef} value={query} onChange={event => { setQuery(event.target.value); setCursorPosition(event.target.selectionStart); }} onClick={updateCursor} onKeyUp={updateCursor} onKeyDown={handleEditorKeyDown} spellCheck={false} aria-label="SOQL query" />{suggestions.length > 0 && <div className="field-suggestions" role="listbox">{suggestions.map((field, index) => <button type="button" key={field} className={index === activeSuggestion ? 'active' : ''} onMouseDown={event => event.preventDefault()} onClick={() => insertSuggestion(field)}>{relationshipPrefix ? `${relationshipPrefix}.${field}` : field}</button>)}</div>}</div><div className="editor-foot"><span>REST API · v61.0</span><button onClick={runQuery} disabled={loading || !query.trim()}>{loading ? 'Running...' : 'Run query'} <span>⌘ ↵</span></button></div></div>
         {error && <div className="error">{error}</div>}
         {result && <section className="results"><div className="results-head"><div><p className="eyebrow">RESULTS</p><h3>{result.totalSize} record{result.totalSize === 1 ? '' : 's'}</h3></div><span className="result-mark">LIVE</span></div><div className="table-wrap"><table><thead><tr>{fields.map(field => <th key={field}>{field}</th>)}</tr></thead><tbody>{result.records.map((record, index) => <tr key={index}>{fields.map(field => <td key={field}>{formatValue(record[field])}</td>)}</tr>)}</tbody></table></div></section>}
       </section>
-      {showLogin && <div className="modal-backdrop"><form className="login-panel" onSubmit={login}><button type="button" className="close" onClick={() => setShowLogin(false)} aria-label="Close login">×</button><div className="login-icon">⚡</div><h1>SOQL Runner</h1><p className="subtitle">Connect to any Salesforce org to run SOQL queries</p><p className="login-note">Credentials are sent directly to Salesforce and are not saved by this app.</p><label>Environment<select value={loginUrl} onChange={event => setLoginUrl(event.target.value)}><option value="https://login.salesforce.com">Production / Developer</option><option value="https://test.salesforce.com">Sandbox</option></select></label><label>Username<input type="email" value={username} onChange={event => setUsername(event.target.value)} autoComplete="username" required /></label><label>Password<input type="password" value={password} onChange={event => setPassword(event.target.value)} autoComplete="current-password" required /></label><label>Security token <span>(if required)</span><input type="password" value={securityToken} onChange={event => setSecurityToken(event.target.value)} autoComplete="off" /></label><button className="login-submit" type="submit" disabled={loading}>{loading ? 'Connecting...' : 'Connect to Salesforce'}</button></form></div>}
+      {showLogin && <div className="modal-backdrop"><form className="login-panel" onSubmit={login}><button type="button" className="close" onClick={() => setShowLogin(false)} aria-label="Close login">×</button><div className="login-icon">⚡</div><h1>SF Dependency Analyzer</h1><p className="subtitle">Connect to any Salesforce org to analyze component dependencies</p><p className="login-note">Credentials are sent directly to Salesforce and are not saved by this app.</p><label>Environment<select value={loginUrl} onChange={event => setLoginUrl(event.target.value)}><option value="https://login.salesforce.com">Production / Developer</option><option value="https://test.salesforce.com">Sandbox</option></select></label><label>Username<input type="email" value={username} onChange={event => setUsername(event.target.value)} autoComplete="username" required /></label><label>Password + Security Token<input type="password" value={password} onChange={event => setPassword(event.target.value)} autoComplete="current-password" required /></label><p className="login-note login-hint">Append your security token to your password (for example: MyPass123TOKEN456).</p><button className="login-submit" type="submit" disabled={loading}>{loading ? 'Connecting...' : 'Connect to Salesforce'}</button></form></div>}
       <footer><span>SOQL RUNNER / VERCEL EDITION</span><span>Credentials stay server-side</span></footer>
     </main>
   );
