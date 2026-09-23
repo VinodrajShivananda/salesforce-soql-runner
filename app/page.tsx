@@ -12,6 +12,7 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [authenticated, setAuthenticated] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
+  const [loginUrl, setLoginUrl] = useState('https://login.salesforce.com');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [securityToken, setSecurityToken] = useState('');
@@ -109,7 +110,7 @@ export default function Home() {
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password, securityToken })
+        body: JSON.stringify({ username, password, securityToken, loginUrl })
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Login failed.');
@@ -135,7 +136,7 @@ export default function Home() {
         {error && <div className="error">{error}</div>}
         {result && <section className="results"><div className="results-head"><div><p className="eyebrow">RESULTS</p><h3>{result.totalSize} record{result.totalSize === 1 ? '' : 's'}</h3></div><span className="result-mark">LIVE</span></div><div className="table-wrap"><table><thead><tr>{fields.map(field => <th key={field}>{field}</th>)}</tr></thead><tbody>{result.records.map((record, index) => <tr key={index}>{fields.map(field => <td key={field}>{formatValue(record[field])}</td>)}</tr>)}</tbody></table></div></section>}
       </section>
-      {showLogin && <div className="modal-backdrop"><form className="login-panel" onSubmit={login}><div className="panel-head"><span>CONNECT SALESFORCE</span><button type="button" className="close" onClick={() => setShowLogin(false)} aria-label="Close login">×</button></div><p className="login-note">Credentials are sent directly to Salesforce and are not saved by this app.</p><label>Username<input type="email" value={username} onChange={event => setUsername(event.target.value)} autoComplete="username" required /></label><label>Password<input type="password" value={password} onChange={event => setPassword(event.target.value)} autoComplete="current-password" required /></label><label>Security token <span>(if required)</span><input type="password" value={securityToken} onChange={event => setSecurityToken(event.target.value)} autoComplete="off" /></label><button className="login-submit" type="submit" disabled={loading}>{loading ? 'Connecting...' : 'Connect securely'}</button></form></div>}
+      {showLogin && <div className="modal-backdrop"><form className="login-panel" onSubmit={login}><div className="panel-head"><span>CONNECT SALESFORCE</span><button type="button" className="close" onClick={() => setShowLogin(false)} aria-label="Close login">×</button></div><p className="login-note">Credentials are sent directly to Salesforce and are not saved by this app.</p><label>Environment<select value={loginUrl} onChange={event => setLoginUrl(event.target.value)}><option value="https://login.salesforce.com">Production / Developer</option><option value="https://test.salesforce.com">Sandbox</option></select></label><label>Username<input type="email" value={username} onChange={event => setUsername(event.target.value)} autoComplete="username" required /></label><label>Password<input type="password" value={password} onChange={event => setPassword(event.target.value)} autoComplete="current-password" required /></label><label>Security token <span>(if required)</span><input type="password" value={securityToken} onChange={event => setSecurityToken(event.target.value)} autoComplete="off" /></label><button className="login-submit" type="submit" disabled={loading}>{loading ? 'Connecting...' : 'Connect securely'}</button></form></div>}
       <footer><span>SOQL RUNNER / VERCEL EDITION</span><span>Credentials stay server-side</span></footer>
     </main>
   );
