@@ -4,5 +4,6 @@ import { readSession } from '../../../../lib/session';
 
 export async function GET() {
   const token = (await cookies()).get('sf_session')?.value;
-  return NextResponse.json({ authenticated: Boolean(await readSession(token)) });
+  const session = await readSession(token);
+  return NextResponse.json({ authenticated: Boolean(session), username: session?.username || null });
 }

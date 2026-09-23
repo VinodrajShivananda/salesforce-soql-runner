@@ -51,8 +51,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Salesforce returned an incomplete login response.' }, { status: 502 });
   }
 
-  const response = NextResponse.json({ authenticated: true });
-  response.cookies.set('sf_session', await createSession({ accessToken, instanceUrl }), {
+  const response = NextResponse.json({ authenticated: true, username });
+  response.cookies.set('sf_session', await createSession({ accessToken, instanceUrl, username }), {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',

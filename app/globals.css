@@ -9,6 +9,8 @@ h1 { font-size: 22px; margin: 7px 0 0; letter-spacing: -.04em; }
 .brand { display: flex; align-items: center; gap: 12px; }
 .brand h1 { margin: 0; font-size: 18px; letter-spacing: 0; }
 .logo { font-size: 24px; }
+.connection-area { display: flex; align-items: center; gap: 12px; }
+.user-name { max-width: 260px; overflow: hidden; color: #4a5568; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 500; }
 .connection { border-radius: 8px; color: white; background: linear-gradient(135deg, var(--lime), var(--violet)); padding: 11px 15px; text-decoration: none; font-weight: 600; font-size: 13px; }
 .connection span { margin-left: 12px; }
 .workspace { width: min(1100px, 100%); margin: 24px auto; padding: 0 24px; flex: 1; }
