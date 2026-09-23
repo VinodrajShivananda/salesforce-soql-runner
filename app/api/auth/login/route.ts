@@ -2,53 +2,36 @@ import { NextResponse } from 'next/server';
 import { createSession } from '../../../../lib/session';
 
 export async function POST(request: Request) {
-  const body = await request.json() as { username?: string; password?: string; securityToken?: string; loginUrl?: string };
+  const body = await request.json() as { username?: string; password?: string; securityToken?: string };
   const username = body.username?.trim();
   const password = body.password;
-  const securityToken = body.securityToken || '';
 
   if (!username || !password) {
     return NextResponse.json({ error: 'Username and password are required.' }, { status: 400 });
   }
 
-  const loginUrl = (body.loginUrl || 'https://login.salesforce.com').replace(/\/$/, '');
-  if (!['https://login.salesforce.com', 'https://test.salesforce.com'].includes(loginUrl)) {
-    return NextResponse.json({ error: 'Choose a valid Salesforce production or sandbox login URL.' }, { status: 400 });
-  }
-
-  const soapEscape = (value: string) => value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
-  const soapBody = `<?xml version="1.0" encoding="utf-8"?>
-<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:urn="urn:partner.soap.sforce.com">
-  <soapenv:Body>
-    <urn:login>
-      <urn:username>${soapEscape(username)}</urn:username>
-      <urn:password>${soapEscape(password + securityToken)}</urn:password>
-    </urn:login>
-  </soapenv:Body>
-</soapenv:Envelope>`;
-  const tokenResponse = await fetch(`${loginUrl}/services/Soap/u/61.0`, {
+  const loginUrl = process.env.SALESFORCE_LOGIN_URL || 'https://login.salesforce.com';
+  const credentials = new URLSearchParams({
+    grant_type: 'password',
+    client_id: process.env.SALESFORCE_CLIENT_ID || '',
+    client_secret: process.env.SALESFORCE_CLIENT_SECRET || '',
+    username,
+    password: `${password}${body.securityToken || ''}`
+  });
+  const tokenResponse = await fetch(`${loginUrl}/services/oauth2/token`, {
     method: 'POST',
-    headers: { 'Content-Type': 'text/xml', SOAPAction: 'login' },
-    body: soapBody,
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: credentials,
     cache: 'no-store'
   });
 
   if (!tokenResponse.ok) {
-    const responseText = await tokenResponse.text();
-    const detail = responseText.match(/<faultstring>(.*?)<\/faultstring>/)?.[1] || 'Salesforce rejected the login. Check your username, password plus security token, and login environment.';
-    return NextResponse.json({ error: detail }, { status: 401 });
+    return NextResponse.json({ error: 'Salesforce rejected the login. Check your credentials and security token.' }, { status: 401 });
   }
 
-  const responseText = await tokenResponse.text();
-  const accessToken = responseText.match(/<sessionId>(.*?)<\/sessionId>/)?.[1];
-  const serverUrl = responseText.match(/<serverUrl>(.*?)<\/serverUrl>/)?.[1];
-  const instanceUrl = serverUrl?.match(/https:\/\/[^/]+/)?.[0];
-  if (!accessToken || !instanceUrl) {
-    return NextResponse.json({ error: 'Salesforce returned an incomplete login response.' }, { status: 502 });
-  }
-
+  const tokens = await tokenResponse.json() as { access_token: string; instance_url: string };
   const response = NextResponse.json({ authenticated: true });
-  response.cookies.set('sf_session', await createSession({ accessToken, instanceUrl }), {
+  response.cookies.set('sf_session', await createSession({ accessToken: tokens.access_token, instanceUrl: tokens.instance_url }), {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
