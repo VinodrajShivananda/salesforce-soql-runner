@@ -41,16 +41,16 @@ export default function Home() {
   const isSelectingFields = /^\s*SELECT\b[\s\S]*$/i.test(textBeforeCursor) && !/\bFROM\b/i.test(textBeforeCursor);
   const isFilteringFields = /\bWHERE\b[\s\S]*$/i.test(textBeforeCursor) && !/\b(?:ORDER\s+BY|GROUP\s+BY|LIMIT)\b/i.test(textBeforeCursor);
   const isFieldContext = isSelectingFields || isFilteringFields;
-  const fieldDelimiter = '(?:^|,|\\bWHERE\\b|\\bAND\\b|\\bOR\\b)';
+  const fieldDelimiter = '(?:^|,|\\bSELECT\\b|\\bWHERE\\b|\\bAND\\b|\\bOR\\b)';
   const relationshipMatch = isFieldContext ? textBeforeCursor.match(new RegExp(`${fieldDelimiter}\\s*((?:[A-Za-z_]\\w*\\s*\\.\\s*)+)([A-Za-z_]\\w*)?\\s*$`, 'i')) : null;
   const relationshipPath = relationshipMatch?.[1].split('.').map(segment => segment.trim()).filter(Boolean) || [];
   const relationshipPrefix = relationshipPath.join('.');
-  const directFieldMatch = !relationshipMatch && isFieldContext ? textBeforeCursor.match(new RegExp(`${fieldDelimiter}\\s*([A-Za-z_]\\w*)\\s*$`, 'i')) : null;
+  const directFieldMatch = !relationshipMatch && isFieldContext ? textBeforeCursor.match(new RegExp(`${fieldDelimiter}\\s*([A-Za-z_]\\w*)?\\s*$`, 'i')) : null;
   const objectMatch = !isSelectingFields ? textBeforeCursor.match(/\bFROM\s+([A-Za-z_]\w*)?$/i) : null;
   const objectPartial = objectMatch?.[1] || '';
   const partialField = relationshipMatch?.[2] || directFieldMatch?.[1] || '';
   const fieldsToSuggest = relationshipPath.length ? parentFields : availableFields;
-  const fieldSuggestions = (relationshipMatch || directFieldMatch) && (partialField || relationshipPrefix)
+  const fieldSuggestions = (relationshipMatch || directFieldMatch)
     ? fieldsToSuggest.filter(field => field.toLowerCase().startsWith(partialField.toLowerCase())).slice(0, 12)
     : [];
   const objectSuggestions = objectMatch
