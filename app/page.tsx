@@ -60,7 +60,7 @@ export default function Home() {
   const isFieldContext = isSelectingFields || isFilteringFields;
   const fieldDelimiter = '(?:^|,|\\bSELECT\\b|\\bWHERE\\b|\\bAND\\b|\\bOR\\b)';
   const relationshipMatch = isFieldContext ? textBeforeCursor.match(new RegExp(`${fieldDelimiter}\\s*((?:[A-Za-z_]\\w*\\s*\\.\\s*)+)([A-Za-z_]\\w*)?\\s*$`, 'i')) : null;
-  const relationshipPath = relationshipMatch?.[1].split('.').map(segment => segment.trim()).filter(Boolean) || [];
+  const relationshipPath = relationshipMatch?.[1].split('.').map((segment: string) => segment.trim()).filter(Boolean) || [];
   const relationshipPrefix = relationshipPath.join('.');
   const directFieldMatch = !relationshipMatch && isFieldContext ? textBeforeCursor.match(new RegExp(`${fieldDelimiter}\\s*([A-Za-z_]\\w*)?\\s*$`, 'i')) : null;
   
@@ -76,14 +76,14 @@ export default function Home() {
   // Search field suggestions matching any part of field name or label
   const fieldSuggestions: SuggestionItem[] = (relationshipMatch || directFieldMatch)
     ? fieldsToSuggest
-        .filter(field => {
+        .filter((field: string) => {
           if (!lowerPartialField) return true;
           const nameMatches = field.toLowerCase().includes(lowerPartialField);
           const label = currentLabels[field];
           const labelMatches = label ? label.toLowerCase().includes(lowerPartialField) : false;
           return nameMatches || labelMatches;
         })
-        .sort((a, b) => {
+        .sort((a: string, b: string) => {
           if (!lowerPartialField) return a.localeCompare(b);
           const aStarts = a.toLowerCase().startsWith(lowerPartialField);
           const bStarts = b.toLowerCase().startsWith(lowerPartialField);
@@ -96,7 +96,7 @@ export default function Home() {
           return a.localeCompare(b);
         })
         .slice(0, 15)
-        .map(field => {
+        .map((field: string) => {
           const fullField = relationshipPrefix ? `${relationshipPrefix}.${field}` : field;
           const label = currentLabels[field];
           return {
@@ -113,11 +113,11 @@ export default function Home() {
   const lowerObjectPartial = objectPartial.toLowerCase();
   const objectSuggestions: SuggestionItem[] = objectMatch
     ? availableObjects
-        .filter(obj => {
+        .filter((obj: SObjectInfo) => {
           if (!lowerObjectPartial) return true;
           return obj.label.toLowerCase().includes(lowerObjectPartial) || obj.name.toLowerCase().includes(lowerObjectPartial);
         })
-        .sort((a, b) => {
+        .sort((a: SObjectInfo, b: SObjectInfo) => {
           if (!lowerObjectPartial) return a.label.localeCompare(b.label);
           const aLabelStarts = a.label.toLowerCase().startsWith(lowerObjectPartial);
           const bLabelStarts = b.label.toLowerCase().startsWith(lowerObjectPartial);
@@ -130,7 +130,7 @@ export default function Home() {
           return a.label.localeCompare(b.label);
         })
         .slice(0, 15)
-        .map(obj => ({
+        .map((obj: SObjectInfo) => ({
           id: obj.name,
           type: 'object',
           display: obj.label,
@@ -142,7 +142,7 @@ export default function Home() {
   const dateFieldMatch = isFilteringFields
     ? textBeforeCursor.match(/(?:\bWHERE\b|\bAND\b|\bOR\b)\s+([A-Za-z_]\w*(?:\s*\.\s*[A-Za-z_]\w*)*)\s*(?:!=|<=|>=|=|<|>|LIKE)\s*([A-Za-z_]\w*)?$/i)
     : null;
-  const dateFieldPath = dateFieldMatch?.[1].split('.').map(segment => segment.trim()) || [];
+  const dateFieldPath = dateFieldMatch?.[1].split('.').map((segment: string) => segment.trim()) || [];
   const dateFieldName = dateFieldPath.at(-1) || '';
   const dateFieldType = dateFieldMatch
     ? (dateFieldPath.length > 1 ? parentFieldTypes[dateFieldName] : fieldTypes[dateFieldName])?.toLowerCase()
@@ -290,10 +290,10 @@ export default function Home() {
     if (!editorSuggestions.length) return;
     if (event.key === 'ArrowDown') {
       event.preventDefault();
-      setActiveSuggestion(index => (index + 1) % editorSuggestions.length);
+      setActiveSuggestion((index: number) => (index + 1) % editorSuggestions.length);
     } else if (event.key === 'ArrowUp') {
       event.preventDefault();
-      setActiveSuggestion(index => (index - 1 + editorSuggestions.length) % editorSuggestions.length);
+      setActiveSuggestion((index: number) => (index - 1 + editorSuggestions.length) % editorSuggestions.length);
     } else if (event.key === 'Tab' || event.key === 'Enter') {
       event.preventDefault();
       insertSuggestion(editorSuggestions[activeSuggestion]);
@@ -487,16 +487,6 @@ export default function Home() {
                       ✕
                     </button>
                   </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-                    aria-label="Remove saved query"
-                    title="Remove query"
-                  >
-                    ✕
-                  </button>
                 </div>
               ))}
             </div>
