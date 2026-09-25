@@ -20,7 +20,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: data[0]?.message || data.message || 'Salesforce rejected the object description.' }, { status: salesforceResponse.status });
   }
 
-  const fields = data.fields as Array<{ name: string; type?: string; relationshipName?: string; referenceTo?: string[] }>;
+  const fields = data.fields as Array<{ name: string; label?: string; type?: string; relationshipName?: string; referenceTo?: string[] }>;
   const relationships = Object.fromEntries(
     fields
       .filter(field => field.relationshipName && field.referenceTo?.length)
@@ -29,6 +29,7 @@ export async function GET(request: Request) {
 
   return NextResponse.json({
     fields: fields.map(field => field.name),
+    fieldLabels: Object.fromEntries(fields.map(field => [field.name, field.label || field.name])),
     fieldTypes: Object.fromEntries(fields.map(field => [field.name, field.type || ''])),
     relationships
   });

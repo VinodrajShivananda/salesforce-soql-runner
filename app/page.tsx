@@ -1,10 +1,25 @@
 'use client';
 
-import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type MouseEvent } from 'react';
+import { clearSavedQueries, loadSavedQueries, removeQueryFromCookie, saveQueryToCookie } from '../lib/savedQueries';
 
 type RecordValue = Record<string, unknown>;
 type QueryResult = { totalSize: number; records: RecordValue[] };
-type SchemaData = { fields?: string[]; fieldTypes?: Record<string, string>; relationships?: Record<string, string[]> };
+type SchemaData = {
+  fields?: string[];
+  fieldLabels?: Record<string, string>;
+  fieldTypes?: Record<string, string>;
+  relationships?: Record<string, string[]>;
+};
+type SObjectInfo = { name: string; label: string };
+
+type SuggestionItem = {
+  id: string;
+  type: 'object' | 'field' | 'date';
+  display: string;
+  insertValue: string;
+  secondary?: string;
+};
 
 export default function Home() {
   const [query, setQuery] = useState('SELECT Id, Name FROM Account LIMIT 10');
@@ -18,16 +33,20 @@ export default function Home() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [availableFields, setAvailableFields] = useState<string[]>([]);
+  const [fieldLabels, setFieldLabels] = useState<Record<string, string>>({});
   const [fieldTypes, setFieldTypes] = useState<Record<string, string>>({});
-  const [availableObjects, setAvailableObjects] = useState<string[]>([]);
+  const [availableObjects, setAvailableObjects] = useState<SObjectInfo[]>([]);
   const [relationships, setRelationships] = useState<Record<string, string[]>>({});
   const [parentFields, setParentFields] = useState<string[]>([]);
+  const [parentFieldLabels, setParentFieldLabels] = useState<Record<string, string>>({});
   const [parentFieldTypes, setParentFieldTypes] = useState<Record<string, string>>({});
   const [cursorPosition, setCursorPosition] = useState(0);
   const [activeSuggestion, setActiveSuggestion] = useState(0);
+  const [savedQueries, setSavedQueries] = useState<string[]>([]);
   const queryEditorRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
+    setSavedQueries(loadSavedQueries());
     fetch('/api/auth/session').then(response => response.json()).then(data => {
       setAuthenticated(data.authenticated);
       setInstanceUrl(data.instanceUrl || '');
@@ -44,17 +63,82 @@ export default function Home() {
   const relationshipPath = relationshipMatch?.[1].split('.').map(segment => segment.trim()).filter(Boolean) || [];
   const relationshipPrefix = relationshipPath.join('.');
   const directFieldMatch = !relationshipMatch && isFieldContext ? textBeforeCursor.match(new RegExp(`${fieldDelimiter}\\s*([A-Za-z_]\\w*)?\\s*$`, 'i')) : null;
-  const objectMatch = !isSelectingFields ? textBeforeCursor.match(/\bFROM\s+([A-Za-z_]\w*)?$/i) : null;
-  const objectPartial = objectMatch?.[1] || '';
+  
+  // Object context match after FROM keyword
+  const objectMatch = !isSelectingFields ? textBeforeCursor.match(/\bFROM\s+([A-Za-z0-9_ ]*)$/i) : null;
+  const objectPartial = objectMatch?.[1]?.trim() || '';
   const partialField = relationshipMatch?.[2] || directFieldMatch?.[1] || '';
+  
   const fieldsToSuggest = relationshipPath.length ? parentFields : availableFields;
-  const fieldSuggestions = (relationshipMatch || directFieldMatch)
-    ? fieldsToSuggest.filter(field => field.toLowerCase().startsWith(partialField.toLowerCase())).slice(0, 12)
+  const currentLabels = relationshipPath.length ? parentFieldLabels : fieldLabels;
+  const lowerPartialField = partialField.toLowerCase();
+
+  // Search field suggestions matching any part of field name or label
+  const fieldSuggestions: SuggestionItem[] = (relationshipMatch || directFieldMatch)
+    ? fieldsToSuggest
+        .filter(field => {
+          if (!lowerPartialField) return true;
+          const nameMatches = field.toLowerCase().includes(lowerPartialField);
+          const label = currentLabels[field];
+          const labelMatches = label ? label.toLowerCase().includes(lowerPartialField) : false;
+          return nameMatches || labelMatches;
+        })
+        .sort((a, b) => {
+          if (!lowerPartialField) return a.localeCompare(b);
+          const aStarts = a.toLowerCase().startsWith(lowerPartialField);
+          const bStarts = b.toLowerCase().startsWith(lowerPartialField);
+          if (aStarts && !bStarts) return -1;
+          if (!aStarts && bStarts) return 1;
+          const aIncludes = a.toLowerCase().includes(lowerPartialField);
+          const bIncludes = b.toLowerCase().includes(lowerPartialField);
+          if (aIncludes && !bIncludes) return -1;
+          if (!aIncludes && bIncludes) return 1;
+          return a.localeCompare(b);
+        })
+        .slice(0, 15)
+        .map(field => {
+          const fullField = relationshipPrefix ? `${relationshipPrefix}.${field}` : field;
+          const label = currentLabels[field];
+          return {
+            id: fullField,
+            type: 'field',
+            display: fullField,
+            secondary: label && label.toLowerCase() !== field.toLowerCase() ? label : undefined,
+            insertValue: field
+          };
+        })
     : [];
-  const objectSuggestions = objectMatch
-    ? availableObjects.filter(object => object.toLowerCase().startsWith(objectPartial.toLowerCase())).slice(0, 12)
+
+  // Search object suggestions based on label (and name)
+  const lowerObjectPartial = objectPartial.toLowerCase();
+  const objectSuggestions: SuggestionItem[] = objectMatch
+    ? availableObjects
+        .filter(obj => {
+          if (!lowerObjectPartial) return true;
+          return obj.label.toLowerCase().includes(lowerObjectPartial) || obj.name.toLowerCase().includes(lowerObjectPartial);
+        })
+        .sort((a, b) => {
+          if (!lowerObjectPartial) return a.label.localeCompare(b.label);
+          const aLabelStarts = a.label.toLowerCase().startsWith(lowerObjectPartial);
+          const bLabelStarts = b.label.toLowerCase().startsWith(lowerObjectPartial);
+          if (aLabelStarts && !bLabelStarts) return -1;
+          if (!aLabelStarts && bLabelStarts) return 1;
+          const aNameStarts = a.name.toLowerCase().startsWith(lowerObjectPartial);
+          const bNameStarts = b.name.toLowerCase().startsWith(lowerObjectPartial);
+          if (aNameStarts && !bNameStarts) return -1;
+          if (!aNameStarts && bNameStarts) return 1;
+          return a.label.localeCompare(b.label);
+        })
+        .slice(0, 15)
+        .map(obj => ({
+          id: obj.name,
+          type: 'object',
+          display: obj.label,
+          secondary: obj.name !== obj.label ? obj.name : undefined,
+          insertValue: obj.name
+        }))
     : [];
-  const suggestions = objectMatch ? objectSuggestions : fieldSuggestions;
+
   const dateFieldMatch = isFilteringFields
     ? textBeforeCursor.match(/(?:\bWHERE\b|\bAND\b|\bOR\b)\s+([A-Za-z_]\w*(?:\s*\.\s*[A-Za-z_]\w*)*)\s*(?:!=|<=|>=|=|<|>|LIKE)\s*([A-Za-z_]\w*)?$/i)
     : null;
@@ -64,10 +148,18 @@ export default function Home() {
     ? (dateFieldPath.length > 1 ? parentFieldTypes[dateFieldName] : fieldTypes[dateFieldName])?.toLowerCase()
     : '';
   const dateLiterals = ['TODAY', 'YESTERDAY', 'TOMORROW', 'THIS_WEEK', 'LAST_WEEK', 'NEXT_WEEK', 'THIS_MONTH', 'LAST_MONTH', 'NEXT_MONTH', 'THIS_QUARTER', 'LAST_QUARTER', 'NEXT_QUARTER', 'THIS_YEAR', 'LAST_YEAR', 'NEXT_YEAR', 'LAST_N_DAYS:7', 'NEXT_N_DAYS:7', 'LAST_N_MONTHS:1', 'NEXT_N_MONTHS:1'];
-  const dateSuggestions = dateFieldMatch && (dateFieldType === 'date' || dateFieldType === 'datetime')
-    ? dateLiterals.filter(literal => literal.toLowerCase().startsWith((dateFieldMatch[2] || '').toLowerCase()))
+  const dateSuggestions: SuggestionItem[] = dateFieldMatch && (dateFieldType === 'date' || dateFieldType === 'datetime')
+    ? dateLiterals
+        .filter(literal => literal.toLowerCase().startsWith((dateFieldMatch[2] || '').toLowerCase()))
+        .map(literal => ({
+          id: literal,
+          type: 'date',
+          display: literal,
+          insertValue: literal
+        }))
     : [];
-  const editorSuggestions = dateSuggestions.length ? dateSuggestions : suggestions;
+
+  const editorSuggestions: SuggestionItem[] = dateSuggestions.length ? dateSuggestions : (objectMatch ? objectSuggestions : fieldSuggestions);
 
   useEffect(() => {
     if (!authenticated) {
@@ -76,7 +168,14 @@ export default function Home() {
     }
     fetch('/api/objects')
       .then(response => response.ok ? response.json() : null)
-      .then(data => setAvailableObjects(data?.objects || []))
+      .then(data => {
+        const rawObjects = data?.objects || [];
+        const formatted: SObjectInfo[] = rawObjects.map((item: string | { name: string; label?: string }) => {
+          if (typeof item === 'string') return { name: item, label: item };
+          return { name: item.name, label: item.label || item.name };
+        });
+        setAvailableObjects(formatted);
+      })
       .catch(() => setAvailableObjects([]));
   }, [authenticated]);
 
@@ -87,9 +186,11 @@ export default function Home() {
   useEffect(() => {
     if (!authenticated || !objectName) {
       setAvailableFields([]);
+      setFieldLabels({});
       setFieldTypes({});
       setRelationships({});
       setParentFields([]);
+      setParentFieldLabels({});
       setParentFieldTypes({});
       return;
     }
@@ -97,11 +198,13 @@ export default function Home() {
       .then(response => response.ok ? response.json() : null)
       .then(data => {
         setAvailableFields(data?.fields || []);
+        setFieldLabels(data?.fieldLabels || {});
         setFieldTypes(data?.fieldTypes || {});
         setRelationships(data?.relationships || {});
       })
       .catch(() => {
         setAvailableFields([]);
+        setFieldLabels({});
         setFieldTypes({});
         setRelationships({});
       });
@@ -109,6 +212,7 @@ export default function Home() {
 
   useEffect(() => {
     setParentFields([]);
+    setParentFieldLabels({});
     setParentFieldTypes({});
     if (!authenticated || !objectName || !relationshipPath.length) {
       return;
@@ -126,26 +230,47 @@ export default function Home() {
         currentRelationships = data.relationships || {};
         if (relationship === relationshipPath[relationshipPath.length - 1]) {
           setParentFields(data.fields || []);
+          setParentFieldLabels(data.fieldLabels || {});
           setParentFieldTypes(data.fieldTypes || {});
         }
       }
     }
 
-    void loadRelatedFields().catch(() => setParentFields([]));
+    void loadRelatedFields().catch(() => {
+      setParentFields([]);
+      setParentFieldLabels({});
+      setParentFieldTypes({});
+    });
   }, [authenticated, objectName, relationshipPrefix, relationships]);
 
   function updateCursor() {
     setCursorPosition(queryEditorRef.current?.selectionStart || 0);
   }
 
-  function insertSuggestion(field: string) {
+  function insertSuggestion(suggestion: SuggestionItem) {
     const editor = queryEditorRef.current;
     if (!editor) return;
     const beforeCursor = query.slice(0, cursorPosition);
-    const tokenStart = beforeCursor.search(/[A-Za-z_]\w*$/);
+
+    if (suggestion.type === 'object') {
+      const fromMatch = beforeCursor.match(/^(.*?\bFROM\s+)[A-Za-z0-9_ ]*$/i);
+      const start = fromMatch ? fromMatch[1].length : cursorPosition;
+      const afterCursor = query.slice(cursorPosition).trimStart();
+      const nextQuery = `${query.slice(0, start)}${suggestion.insertValue} ${afterCursor}`;
+      const nextCursor = start + suggestion.insertValue.length + 1;
+      setQuery(nextQuery);
+      setCursorPosition(nextCursor);
+      requestAnimationFrame(() => {
+        editor.focus();
+        editor.setSelectionRange(nextCursor, nextCursor);
+      });
+      return;
+    }
+
+    const tokenStart = beforeCursor.search(/[A-Za-z_0-9:]*$/);
     const start = tokenStart === -1 ? cursorPosition : tokenStart;
-    const nextQuery = `${query.slice(0, start)}${field}${query.slice(cursorPosition)}`;
-    const nextCursor = start + field.length;
+    const nextQuery = `${query.slice(0, start)}${suggestion.insertValue}${query.slice(cursorPosition)}`;
+    const nextCursor = start + suggestion.insertValue.length;
     setQuery(nextQuery);
     setCursorPosition(nextCursor);
     requestAnimationFrame(() => {
@@ -155,6 +280,13 @@ export default function Home() {
   }
 
   function handleEditorKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+      event.preventDefault();
+      if (!loading && query.trim()) {
+        void executeQuery(query);
+      }
+      return;
+    }
     if (!editorSuggestions.length) return;
     if (event.key === 'ArrowDown') {
       event.preventDefault();
@@ -168,7 +300,34 @@ export default function Home() {
     }
   }
 
-  async function runQuery() {
+  function handleSaveQuery() {
+    if (!query.trim()) return;
+    const nextSaved = saveQueryToCookie(query, savedQueries);
+    setSavedQueries(nextSaved);
+  }
+
+  function handleSelectSavedQuery(selectedQuery: string) {
+    setQuery(selectedQuery);
+    setCursorPosition(selectedQuery.length);
+    requestAnimationFrame(() => {
+      queryEditorRef.current?.focus();
+    });
+  }
+
+  function handleDeleteSavedQuery(event: MouseEvent<HTMLButtonElement>, targetQuery: string) {
+    event.stopPropagation();
+    const nextSaved = removeQueryFromCookie(targetQuery, savedQueries);
+    setSavedQueries(nextSaved);
+  }
+
+  function handleClearSavedQueries() {
+    const nextSaved = clearSavedQueries();
+    setSavedQueries(nextSaved);
+  }
+
+  async function executeQuery(queryString: string) {
+    const trimmedQuery = queryString.trim();
+    if (!trimmedQuery) return;
     setLoading(true);
     setError('');
     setResult(null);
@@ -176,16 +335,22 @@ export default function Home() {
       const response = await fetch('/api/query', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query })
+        body: JSON.stringify({ query: trimmedQuery })
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Query failed.');
       setResult(data);
+      const nextSaved = saveQueryToCookie(trimmedQuery, savedQueries);
+      setSavedQueries(nextSaved);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Query failed.');
     } finally {
       setLoading(false);
     }
+  }
+
+  async function runQuery() {
+    await executeQuery(query);
   }
 
   async function login(event: FormEvent<HTMLFormElement>) {
@@ -225,7 +390,118 @@ export default function Home() {
     <main className="shell">
       <header className="topbar"><div className="brand"><span className="logo">⚡</span><h1>SOQL Runner</h1></div><div className="connection-area">{authenticated ? <><span className="org-badge">{getOrgHost(instanceUrl)}</span><button className="disconnect" onClick={disconnect}>Disconnect</button></> : <button className="connection" onClick={() => setShowLogin(true)}>Connect Salesforce <span>↗</span></button>}</div></header>
       <section className="workspace">
-        <div className="editor-panel"><div className="panel-head"><span>SOQL EDITOR</span><span className="status-dot">{authenticated ? 'ORG CONNECTED' : 'AUTH REQUIRED'}</span></div><div className="editor-body"><textarea ref={queryEditorRef} value={query} onChange={event => { setQuery(event.target.value); setCursorPosition(event.target.selectionStart); }} onClick={updateCursor} onKeyUp={updateCursor} onKeyDown={handleEditorKeyDown} spellCheck={false} aria-label="SOQL query" />{editorSuggestions.length > 0 && <div className="field-suggestions" role="listbox" aria-label="Query suggestions">{editorSuggestions.map((suggestion, index) => <button type="button" key={suggestion} className={index === activeSuggestion ? 'active' : ''} onMouseDown={event => event.preventDefault()} onClick={() => insertSuggestion(suggestion)}>{dateSuggestions.length ? suggestion : objectMatch ? suggestion : relationshipPrefix ? `${relationshipPrefix}.${suggestion}` : suggestion}</button>)}</div>}</div><div className="editor-foot"><span>REST API · v61.0</span><button onClick={runQuery} disabled={loading || !query.trim()}>{loading ? 'Running...' : 'Run query'} <span>⌘ ↵</span></button></div></div>
+        <div className="editor-panel">
+          <div className="panel-head">
+            <span>SOQL EDITOR</span>
+            <span className="status-dot">{authenticated ? 'ORG CONNECTED' : 'AUTH REQUIRED'}</span>
+          </div>
+          <div className="editor-body">
+            <textarea
+              ref={queryEditorRef}
+              value={query}
+              onChange={event => {
+                setQuery(event.target.value);
+                setCursorPosition(event.target.selectionStart);
+              }}
+              onClick={updateCursor}
+              onKeyUp={updateCursor}
+              onKeyDown={handleEditorKeyDown}
+              spellCheck={false}
+              aria-label="SOQL query"
+            />
+            {editorSuggestions.length > 0 && (
+              <div className="field-suggestions" role="listbox" aria-label="Query suggestions">
+                {editorSuggestions.map((suggestion, index) => (
+                  <button
+                    type="button"
+                    key={suggestion.id}
+                    className={index === activeSuggestion ? 'active' : ''}
+                    onMouseDown={event => event.preventDefault()}
+                    onClick={() => insertSuggestion(suggestion)}
+                  >
+                    <span className="suggestion-main">{suggestion.display}</span>
+                    {suggestion.secondary && <span className="suggestion-sub"> · {suggestion.secondary}</span>}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="editor-foot">
+            <span>REST API · v61.0</span>
+            <div className="editor-actions">
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={handleSaveQuery}
+                disabled={!query.trim()}
+                title="Save query to browser cookie"
+              >
+                Save query
+              </button>
+              <button onClick={runQuery} disabled={loading || !query.trim()}>
+                {loading ? 'Running...' : 'Run query'} <span>⌘ ↵</span>
+              </button>
+            </div>
+          </div>
+        </div>
+        {savedQueries.length > 0 && (
+          <div className="saved-queries-panel">
+            <div className="saved-queries-head">
+              <span>EXECUTED QUERIES HISTORY ({savedQueries.length})</span>
+              <div className="saved-queries-actions">
+                <button type="button" className="clear-saved-btn" onClick={handleClearSavedQueries}>
+                  Clear history
+                </button>
+              </div>
+            </div>
+            <div className="saved-queries-list">
+              {savedQueries.map(savedQuery => (
+                <div key={savedQuery} className="saved-query-item">
+                  <button
+                    type="button"
+                    className="saved-query-btn"
+                    onClick={() => handleSelectSavedQuery(savedQuery)}
+                    title="Click to load into editor"
+                  >
+                    {savedQuery}
+                  </button>
+                  <div className="saved-query-actions">
+                    <button
+                      type="button"
+                      className="saved-query-run-btn"
+                      onClick={() => {
+                        setQuery(savedQuery);
+                        void executeQuery(savedQuery);
+                      }}
+                      title="Run this query directly"
+                    >
+                      Run
+                    </button>
+                    <button
+                      type="button"
+                      className="saved-query-del-btn"
+                      onClick={(event) => handleDeleteSavedQuery(event, savedQuery)}
+                      aria-label="Remove query from history"
+                      title="Remove from history"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+                    aria-label="Remove saved query"
+                    title="Remove query"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         {error && <div className="error">{error}</div>}
         {result && <section className="results"><div className="results-head"><div><p className="eyebrow">RESULTS</p><h3>{result.totalSize} record{result.totalSize === 1 ? '' : 's'}</h3></div><span className="result-mark">LIVE</span></div><div className="table-wrap"><table><thead><tr>{fields.map(field => <th key={field}>{field}</th>)}</tr></thead><tbody>{result.records.map((record, index) => <tr key={index}>{fields.map(field => { const value = getNestedValue(record, field); return <td key={field}>{field === 'Id' && typeof value === 'string' && instanceUrl ? <a href={`${instanceUrl}/lightning/r/${objectName}/${value}/view`} target="_blank" rel="noreferrer">{value}</a> : formatValue(value)}</td>; })}</tr>)}</tbody></table></div></section>}
       </section>

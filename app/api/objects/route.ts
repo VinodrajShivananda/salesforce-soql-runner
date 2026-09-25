@@ -15,5 +15,12 @@ export async function GET() {
     return NextResponse.json({ error: data[0]?.message || data.message || 'Salesforce rejected the object list request.' }, { status: salesforceResponse.status });
   }
 
-  return NextResponse.json({ objects: data.sobjects.filter((object: { queryable?: boolean; name: string }) => object.queryable).map((object: { name: string }) => object.name) });
+  return NextResponse.json({
+    objects: (data.sobjects as Array<{ queryable?: boolean; name: string; label?: string }>)
+      .filter(object => object.queryable)
+      .map(object => ({
+        name: object.name,
+        label: object.label || object.name
+      }))
+  });
 }
